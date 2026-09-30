@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent de mesagerie</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <h1>Agent de mesagerie</h1>
+      <p class="status" id="brokerStatus"><span class="dot"></span><span id="brokerText">Se conectează la broker…</span></p>
+    </div>
+    <dl class="counters" id="counters">
+      <div><dt>Publicate</dt><dd data-c="published">0</dd></div>
+      <div><dt>Livrate</dt><dd data-c="delivered">0</dd></div>
+      <div><dt>Confirmate</dt><dd data-c="acked">0</dd></div>
+      <div><dt>Retransmise</dt><dd data-c="redelivered">0</dd></div>
+      <div><dt>Duplicate</dt><dd data-c="duplicates">0</dd></div>
+      <div class="bad"><dt>Invalide</dt><dd data-c="invalid">0</dd></div>
+    </dl>
+  </header>
+
+  <main class="board">
+    <!-- ============================== SENDER -->
+    <section class="col sender" aria-labelledby="h-sender">
+      <h2 id="h-sender" class="col-title"><span class="endpoint"></span>Sender</h2>
+
+      <form id="publishForm" class="panel">
+        <div class="row2">
+          <label>Nume sender<input name="sender" value="web-sender" required pattern="[A-Za-z0-9_.\-]{1,64}"></label>
+          <label>Subiect<input name="topic" value="news.sport" list="topicList" required pattern="[A-Za-z0-9_\-]+(\.[A-Za-z0-9_\-]+)*"></label>
+        </div>
+        <datalist id="topicList"></datalist>
+        <fieldset class="seg">
+          <legend>Format pe fir</legend>
+          <label><input type="radio" name="format" value="json" checked><span>JSON</span></label>
+          <label><input type="radio" name="format" value="xml"><span>XML</span></label>
+        </fieldset>
+        <label>Mesaj<textarea name="payload" rows="3" required>Scor final: 2–1 pentru Zimbru</textarea></label>
+        <div class="row-end">
+          <label class="small">Repetări<input name="count" type="number" min="1" max="100" value="1"></label>
+          <button type="submit" class="primary">Publică</button>
+        </div>
+      </form>
+
+      <div class="panel wire" id="lastWire" hidden>
+        <h3>Ultima publicare</h3>
+        <p class="hint" id="lastWireMeta"></p>
+        <pre id="lastWireSent"></pre>
+        <p class="hint">Răspunsul brokerului</p>
+        <pre id="lastWireReply"></pre>
+      </div>
+
+      <details class="panel raw">
+        <summary>Trimite un mesaj invalid</summary>
+        <p class="hint">Brokerul trebuie să răspundă cu o eroare și să continue să funcționeze.</p>
+        <div class="presets" id="presets">
+          <button type="button" data-p="badjson">JSON stricat</button>
+          <button type="button" data-p="notopic">XML fără subiect</button>
+          <button type="button" data-p="unknown">Tip necunoscut</button>
+          <button type="button" data-p="checksum">Checksum greșit</button>
+          <button type="button" data-p="garbage">Text simplu</button>
+        </div>
+        <textarea id="rawText" rows="4" spellcheck="false"></textarea>
+        <div class="row-end"><button type="button" id="rawSend">Trimite brut</button></div>
+        <pre id="rawReply" hidden></pre>
+      </details>
+    </section>
+
+    <!-- ============================== BROKER -->
+    <section class="col broker" aria-labelledby="h-broker">
+      <h2 id="h-broker" class="col-title"><span class="endpoint"></span>Broker <span class="cfg" id="cfg"></span></h2>
+
+      <div class="zone routing">
+        <h3>Rutare <span class="hint">canale create dinamic, câte unul per subiect</span></h3>
+        <ul class="pipes" id="topics"><li class="empty">Niciun canal încă. Publică un mesaj ca să apară primul.</li></ul>
+      </div>
+
+      <div class="zone storing">
+        <h3>Stocare <span class="hint" id="storageMode"></span></h3>
+        <div class="table-wrap">
+          <table class="subs">
+            <thead><tr><th>Client</th><th>Abonări</th><th>Livrare</th><th class="n">În coadă</th><th class="n">Fără ACK</th></tr></thead>
+            <tbody id="subs"><tr><td colspan="5" class="empty">Niciun client conectat.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="zone split">
+        <div>
+          <h3>Dead-letter</h3>
+          <ul class="dead" id="dead"><li class="empty">Nicio problemă până acum.</li></ul>
+        </div>
+        <div>
+          <h3>Jurnal</h3>
+          <ul class="log" id="log"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== RECEIVERS -->
+    <section class="col receivers" aria-labelledby="h-recv">
+      <h2 id="h-recv" class="col-title"><span class="endpoint"></span>Receiveri</h2>
+
+      <form id="receiverForm" class="panel">
+        <div class="row2">
+          <label>Nume<input name="name" value="web-receiver-1" required pattern="[A-Za-z0-9_.\-]{1,64}"></label>
+          <label>Abonări<input name="topics" value="news.*" required title="Separate prin virgulă. * = un segment, # = restul"></label>
+        </div>
+        <fieldset class="seg">
+          <legend>Primește în format</legend>
+          <label><input type="radio" name="format" value="json"><span>JSON</span></label>
+          <label><input type="radio" name="format" value="xml" checked><span>XML</span></label>
+        </fieldset>
+        <div class="row-end">
+          <label class="check"><input type="checkbox" name="autoAck" checked> Confirmă automat</label>
+          <button type="submit" class="primary">Adaugă receiver</button>
+        </div>
+        <p class="form-error" id="recvError" hidden></p>
+      </form>
+
+      <div id="receiverList"></div>
+      <p class="empty" id="noReceivers">Adaugă un receiver ca să vezi mesajele sosind. Clienții Java, Go și C# apar în tabelul brokerului.</p>
+    </section>
+  </main>
+
+  <template id="receiverTpl">
+    <article class="receiver panel">
+      <header>
+        <div>
+          <h3 class="r-name"></h3>
+          <p class="r-meta"></p>
+        </div>
+        <span class="conn"></span>
+      </header>
+      <div class="r-controls">
+        <label class="check"><input type="checkbox" class="r-autoack"> Confirmă automat</label>
+        <button type="button" class="r-disconnect">Deconectează</button>
+        <button type="button" class="r-forget danger">Șterge abonarea</button>
+      </div>
+      <ol class="inbox"><li class="empty">Așteaptă mesaje…</li></ol>
+    </article>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
